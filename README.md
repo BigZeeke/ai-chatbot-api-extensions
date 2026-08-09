@@ -60,11 +60,11 @@ curl http://localhost:8000/api/conversations/
 
 ## Assignment 3 — Token-limit truncation
 
-The lesson showed `build_messages_for_llm(conversation, max_messages=20)` in the "Token Limits and Truncation Strategies" section.  Wire it in.
+The lesson showed `build_messages_for_llm` in the "Token Limits and Truncation Strategies" section.  Wire it in.
 
 ### Requirements
-- Replace the inline `[{...} for msg in history]` list construction in `send_message` with a call to `build_messages_for_llm(conversation, max_messages=20)`
-- If a conversation exceeds 20 non-system messages, only the system prompt + most recent 10 non-system messages get sent to the LLM
+- Replace the inline `[{...} for msg in history]` list construction in `send_message` with a call to `build_messages_for_llm(conversation, max_messages=10)`
+- If a conversation exceeds 10 non-system messages, only the system prompt + most recent 10 non-system messages get sent to the LLM
 - The full history still gets **persisted** in the DB — only the **outbound** request gets truncated
 
 ### Verify
