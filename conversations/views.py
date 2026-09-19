@@ -2,22 +2,36 @@ from rest_framework import status
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from django.conf import settings
+from django.db.models import Count
 from django.shortcuts import get_object_or_404
 
 from .models import Conversation, Message
 from .serializers import (
+    ConversationListSerializer,
     ConversationSerializer,
     SendMessageSerializer,
 )
-from .llm_service import get_llm_response
+from .llm_service import build_messages_for_llm, get_llm_response
 
 
-@api_view(["POST"])
+@api_view(["GET", "POST"])
 def create_conversation(request):
     """
+    GET /api/conversations/
+    List all conversations, newest first, with a message count.
+
     POST /api/conversations/
     Create a new conversation. Optionally accepts a system_prompt field.
     """
+    if request.method == "GET":
+        conversations_with_counts = Conversation.objects.annotate(
+            message_count=Count("messages")
+        ).order_by("-created_at")
+        serializer = ConversationListSerializer(
+            conversations_with_counts, many=True
+        )
+        return Response(serializer.data)
+
     conversation = Conversation.objects.create()
 
     # Create the system message for this conversation
@@ -33,13 +47,21 @@ def create_conversation(request):
     return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
-@api_view(["GET"])
+@api_view(["GET", "DELETE"])
 def get_conversation(request, conversation_id):
     """
     GET /api/conversations/<id>/
     Retrieve a conversation with all its messages.
+
+    DELETE /api/conversations/<id>/
+    Delete a conversation and all of its messages.
     """
     conversation = get_object_or_404(Conversation, id=conversation_id)
+
+    if request.method == "DELETE":
+        conversation.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     serializer = ConversationSerializer(conversation)
     return Response(serializer.data)
 
@@ -64,12 +86,8 @@ def send_message(request, conversation_id):
         content=user_content,
     )
 
-    # Build the message list from conversation history
-    history = conversation.messages.all()
-    messages_for_llm = [
-        {"role": msg.role, "content": msg.content}
-        for msg in history
-    ]
+    # Build the outbound message list: system prompt + most recent messages
+    messages_for_llm = build_messages_for_llm(conversation, max_messages=10)
 
     # Call the LLM
     try:

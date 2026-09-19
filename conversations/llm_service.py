@@ -50,9 +50,35 @@ def get_llm_response(messages):
         if status == 401:
             raise Exception("Invalid LLM API key.")
         elif status == 429:
-            raise Exception(
-                "LLM API rate limit exceeded. Please wait and try again.")
+            raise Exception("LLM API rate limit exceeded. Please wait and try again.")
         else:
             raise Exception(f"LLM API error: HTTP {status}")
     except (KeyError, IndexError):
         raise Exception("Unexpected response format from LLM API.")
+
+
+def build_messages_for_llm(conversation, max_messages=10):
+    """
+    Build the outbound message list for the LLM.
+
+    Returns the system prompt plus the most recent `max_messages`
+    non-system messages, in chronological order. The full history
+    stays in the database; only this outbound list is truncated.
+    """
+    system_message = conversation.messages.filter(role="system").first()
+
+    recent_messages = list(
+        conversation.messages.exclude(role="system").order_by("-created_at", "-id")[
+            :max_messages
+        ]
+    )
+    recent_messages.reverse()
+
+    messages_for_llm = []
+    if system_message:
+        messages_for_llm.append(
+            {"role": system_message.role, "content": system_message.content}
+        )
+    for message in recent_messages:
+        messages_for_llm.append({"role": message.role, "content": message.content})
+    return messages_for_llm
